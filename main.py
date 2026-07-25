@@ -337,17 +337,16 @@ def _print_scan_summary(url, risk_summary, findings, tools):
         print(f"  {color}{sev:<12}{C['RESET']} {count:>6}  {color}{bar}{C['RESET']}")
 
     if findings:
-        print(f"\n  {C['BOLD']}Top 5 Critical/High Findings:{C['RESET']}")
-        shown = 0
-        for f in findings:
-            if shown >= 5:
-                break
-            sev   = f.get("severity", "INFO")
-            score = f.get("cvss_base_score", 0.0)
-            color = C.get(sev, C["RESET"])
-            title = f.get("title", "")[:60]
-            print(f"  {color}[{sev}]{C['RESET']} CVSS {score:.1f} - {title}")
-            shown += 1
+        high_findings = [f for f in findings
+                         if f.get("severity", "INFO") in ("CRITICAL", "HIGH")]
+        if high_findings:
+            print(f"\n  {C['BOLD']}Top 5 Critical/High Findings:{C['RESET']}")
+            for f in high_findings[:5]:
+                sev   = f.get("severity", "INFO")
+                score = f.get("cvss_base_score", 0.0)
+                color = C.get(sev, C["RESET"])
+                title = f.get("title", "")[:60]
+                print(f"  {color}[{sev}]{C['RESET']} CVSS {score:.1f} - {title}")
 
     print()
 

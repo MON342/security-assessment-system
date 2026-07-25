@@ -139,22 +139,21 @@ def _generate_findings(base_url: str, paths: List[Dict]) -> List[Dict]:
 
         for pattern, severity, title, description in SENSITIVE_PATH_PATTERNS:
             if re.search(pattern, path, re.IGNORECASE):
-                # Adjust severity if page requires auth (401/403)
-                if code in (401, 403):
-                    severity = "INFO"
-                    title = f"{title} (Auth Required)"
+                # Use local vars to avoid mutating loop variables
+                effective_severity = "INFO" if code in (401, 403) else severity
+                display_title      = f"{title} (Auth Required)" if code in (401, 403) else title
 
-                key = f"{title}:{path}"
+                key = f"{display_title}:{path}"
                 if key not in seen_titles:
                     seen_titles.add(key)
                     findings.append({
                         "tool":        "gobuster",
-                        "title":       title,
-                        "severity":    severity,
+                        "title":       display_title,
+                        "severity":    effective_severity,
                         "description": description,
                         "evidence":    f"HTTP {code}: {full_url}",
                         "category":   "Directory/File Exposure",
-                        "cvss_vector": config.DEFAULT_CVSS_VECTORS.get(severity, config.DEFAULT_CVSS_VECTORS["MEDIUM"]),
+                        "cvss_vector": config.DEFAULT_CVSS_VECTORS.get(effective_severity, config.DEFAULT_CVSS_VECTORS["MEDIUM"]),
                     })
                 break
 

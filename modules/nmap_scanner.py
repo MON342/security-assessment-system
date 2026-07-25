@@ -242,7 +242,13 @@ def _generate_findings(result: Dict) -> List[Dict]:
                                      "Browser features (camera, mic, geolocation) not restricted.",
                                      "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"),
     }
-    if headers:
+    # Fire missing-header findings whenever we got an HTTP response
+    # (even if the headers dict is empty — absence of all headers IS the problem)
+    if http_info.get("methods") is not None or http_info.get("title") is not None \
+            or http_info.get("server") is not None or any(
+                p in [s.get("name") for s in services]
+                for p in ("http", "https", "http-proxy")
+            ):
         for header_key, (title, sev, desc, cvss) in security_headers.items():
             if header_key not in headers:
                 findings.append({

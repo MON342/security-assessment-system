@@ -13,15 +13,7 @@ import config
 
 logger = logging.getLogger("assessor.nikto")
 
-# Nikto OSVDB risk mapping
-NIKTO_SEVERITY_MAP = {
-    "0": "INFO",
-    "1": "INFO",
-    "2": "LOW",
-    "3": "MEDIUM",
-    "4": "HIGH",
-    "5": "CRITICAL",
-}
+
 
 
 def scan(url: str, output_dir: str) -> Dict[str, Any]:
@@ -92,7 +84,7 @@ def _parse_nikto_json(json_file: str) -> List[Dict]:
         msg      = vuln.get("msg", vuln.get("message", ""))
         uri      = vuln.get("uri", vuln.get("url", ""))
         method   = vuln.get("method", "GET")
-        osvdb_risk = str(vuln.get("OSVDBLINK", ""))
+
 
         # Determine severity from message content
         severity = _classify_nikto_severity(msg)
@@ -143,7 +135,6 @@ def _classify_nikto_severity(msg: str) -> str:
     """Classify severity based on message keywords."""
     msg_lower = msg.lower()
 
-    import re
     if any(re.search(r'\b' + re.escape(k) + r'\b', msg_lower) for k in [
         "sql injection", "remote code", "command injection", "rce",
         "authentication bypass", "admin password", "default credentials",

@@ -5,7 +5,6 @@ Audits SSL/TLS configuration: protocols, ciphers, certificate, vulnerabilities.
 import json
 import logging
 import os
-import re
 from typing import Dict, Any, List
 from urllib.parse import urlparse
 

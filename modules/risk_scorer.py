@@ -3,7 +3,6 @@ modules/risk_scorer.py — CVSS-based Risk Scoring Engine
 Calculates CVSS base scores for each finding and an overall risk score.
 """
 import logging
-import math
 from typing import Dict, Any, List
 
 try:
@@ -23,15 +22,7 @@ FALLBACK_SCORES = {
     "INFO":     0.0,
 }
 
-# Severity contribution weights for overall score accumulation
-# Controls how much each additional finding of that severity adds
-SEVERITY_CONTRIBUTION = {
-    "CRITICAL": 1.00,
-    "HIGH":     0.60,
-    "MEDIUM":   0.25,
-    "LOW":      0.08,
-    "INFO":     0.00,
-}
+
 
 
 def score_finding(finding: Dict) -> Dict:
@@ -85,32 +76,28 @@ def score_all_findings(findings: List[Dict]) -> List[Dict]:
 
 def calculate_overall_score(findings: List[Dict]) -> Dict[str, Any]:
     """
-    Calculate an overall risk score (0-10) for the target.
+    Summarize the risk of all findings.
 
-    Algorithm:
-        1. Start from the highest single CVSS score as the base.
-        2. Each additional finding contributes a weighted fraction
-           scaled by its severity contribution factor, with logarithmic
-           decay so volume of findings is reflected without capping early.
-        3. Normalize to 0-10.
-
-    This means:
-        - 1 CRITICAL  -> ~9.5
-        - 5 CRITICAL  -> ~9.8
-        - 20 CRITICAL -> ~10.0  (saturates only at very high volume)
-        - 1 HIGH only -> ~7.0-8.0
+    Returns:
+        max_score     — Highest single CVSS base score found (0-10).
+        max_severity  — Severity label for that score.
+        total_risks   — Count of findings with severity != INFO.
+        counts        — Per-severity finding counts.
+        breakdown     — Per-severity max/avg score breakdown.
     """
+    SEVERITY_KEYS = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+
     if not findings:
         return {
             "max_score":        0.0,
             "max_severity":     "INFO",
             "total_risks":      0,
-            "counts":           {s: 0 for s in SEVERITY_CONTRIBUTION},
+            "counts":           {s: 0 for s in SEVERITY_KEYS},
             "breakdown":        {},
         }
 
-    counts = {s: 0 for s in SEVERITY_CONTRIBUTION}
-    scores_by_severity: Dict[str, List[float]] = {s: [] for s in SEVERITY_CONTRIBUTION}
+    counts = {s: 0 for s in SEVERITY_KEYS}
+    scores_by_severity: Dict[str, List[float]] = {s: [] for s in SEVERITY_KEYS}
 
     for f in findings:
         sev   = f.get("severity", "INFO").upper()

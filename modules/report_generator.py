@@ -321,7 +321,7 @@ def _save_pdf_report(pdf_path, url, date, risk_summary, findings, scan_results):
 
     # Last page: Appendix (tool status)
     pdf.add_page()
-    _draw_appendix(pdf, scan_results)
+    _draw_appendix(pdf, scan_results, risk_summary)
 
     pdf.output(pdf_path)
 
@@ -726,11 +726,8 @@ def _draw_finding_card(pdf, finding, num):
 # ─────────────────────────────────────────────────────────────────────────────
 #  Appendix
 # ─────────────────────────────────────────────────────────────────────────────
-def _draw_appendix(pdf, scan_results):
+def _draw_appendix(pdf, scan_results, risk_summary):
     _section_header(pdf, "APPENDIX -- SCAN MODULE SUMMARY")
-    counts = {} # Should be passed, assuming available in scope or similar structure
-    # Based on provided context, usually risk_summary is needed here
-    # For this specific edit, we assume the previous logic holds.
 
     for tool_name, data in scan_results.items():
         status = data.get("status", "unknown")

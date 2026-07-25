@@ -44,6 +44,7 @@ def scan(url: str, output_dir: str) -> Dict[str, Any]:
         "url": url,
         "technologies": [],
         "findings": [],
+        "http_status": 0,
         "raw_output": stdout + stderr,
     }
 

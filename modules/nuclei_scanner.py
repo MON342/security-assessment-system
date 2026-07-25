@@ -138,7 +138,7 @@ def _convert_nuclei_entry(entry: Dict) -> Dict:
         "template_id":  template_id,
         "cvss_vector":  cvss_vector,
         "cvss_score":   cvss_score,
-        "cve":          ", ".join(cve_ids) if isinstance(cve_ids, list) else str(cve_ids),
+        "cve":          ", ".join(cve_ids) if isinstance(cve_ids, list) else (str(cve_ids) if cve_ids else ""),
         "references":   refs,
         "tags":         tags,
     }

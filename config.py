@@ -2,6 +2,7 @@
 config.py — Central Configuration
 Automated Security Misconfiguration Assessment and Auditing System
 """
+import logging
 import os
 import shutil
 

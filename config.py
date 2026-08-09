@@ -18,22 +18,23 @@ TOOL_PATHS = {
 }
 
 # ─────────────────────────────────────────────────────────────────
-#  Timeouts (seconds) — None = ไม่มีกำหนดเวลา (สแกนจนเสร็จ)
-#  ตั้งค่าสูงเพื่อให้สแกนครบ ถ้า tool error จะขึ้น ERROR ใน report
+#  Timeouts (seconds) — Default: 600s (10 mins per tool)
 # ─────────────────────────────────────────────────────────────────
 TIMEOUTS = {
-    "nikto":    None,    # ไม่มี timeout — สแกนจนครบ
-    "nuclei":   None,    # ไม่มี timeout — สแกนจนครบ
-    "nmap":     None,    # ไม่มี timeout — สแกนจนครบ
-    "gobuster": None,    # ไม่มี timeout — สแกนจนครบ
-    "testssl":  None,    # ไม่มี timeout — สแกนจนครบ
-    "whatweb":  None,    # ไม่มี timeout — สแกนจนครบ
+    "nikto":    600,
+    "nuclei":   600,
+    "nmap":     600,
+    "gobuster": 600,
+    "testssl":  600,
+    "whatweb":  300,
 }
 
 # ─────────────────────────────────────────
 #  Wordlists
 # ─────────────────────────────────────────
 WORDLISTS = [
+    os.path.join(os.path.dirname(__file__), "wordlists", "common.txt"),
+    os.path.join(os.path.dirname(__file__), "wordlists", "directory-list-2.3-small.txt"),
     "/usr/share/wordlists/dirb/common.txt",
     "/usr/share/dirbuster/wordlists/directory-list-2.3-small.txt",
     "/usr/share/seclists/Discovery/Web-Content/common.txt",
@@ -44,6 +45,7 @@ def get_wordlist() -> str:
     for wl in WORDLISTS:
         if os.path.exists(wl):
             return wl
+    logging.getLogger("assessor.config").warning("No valid wordlist found on system from default paths.")
     return WORDLISTS[0]  # will fail gracefully in gobuster
 
 # ─────────────────────────────────────────

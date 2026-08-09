@@ -49,8 +49,9 @@ def scan(url: str, output_dir: str) -> Dict[str, Any]:
         except Exception as e:
             logger.warning(f"[nikto] Failed to parse JSON, trying text parse: {e}")
             result["findings"] = _parse_nikto_text(stdout)
-    else:
-        # Fallback: parse stdout text
+
+    # Fallback if no findings from JSON parsing
+    if not result["findings"] and stdout:
         result["findings"] = _parse_nikto_text(stdout)
 
     logger.info(f"[nikto] {len(result['findings'])} findings")

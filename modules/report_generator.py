@@ -97,8 +97,12 @@ def generate_report(
         {"pdf": "...", "txt": "..."}
     """
     from urllib.parse import urlparse
-    host = urlparse(url).hostname or url.replace("://", "_").replace("/", "_")
-    base_name = f"report_{host}_{timestamp}"
+    import re
+    parsed = urlparse(url)
+    host   = parsed.hostname or "target"
+    host_clean = re.sub(r"[^\w.-]", "_", host)
+    port_str   = f"_port{parsed.port}" if parsed.port else ""
+    base_name  = f"report_{host_clean}{port_str}_{timestamp}"
 
     pdf_path = os.path.join(output_dir, f"{base_name}.pdf")
     txt_path = os.path.join(output_dir, f"{base_name}.txt")
@@ -380,43 +384,25 @@ def _draw_cover(pdf: SecurityReport, url: str, date: str, risk_summary: Dict):
     pdf.set_text_color(*COL_TEXT_LIGHT)
     pdf.cell(0, 7, date, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-    # ── Risk Score Badge ─────────────────────────────────────────────────
-    max_score     = risk_summary.get("max_score", 0.0)
-    overall_sev   = risk_summary.get("max_severity", "INFO")
-    risk_label    = get_risk_label(max_score)
-    sev_color     = SEV_COLORS.get(overall_sev, (100, 116, 139))
-    counts        = risk_summary.get("counts", {})
-    total         = sum(counts.values())
-    total_risks   = risk_summary.get("total_risks", 0)
+    # ── Risk Level Banner (No numeric score) ─────────────────────────────
+    max_score   = risk_summary.get("max_score", 0.0)
+    overall_sev = risk_summary.get("max_severity", "INFO")
+    risk_label  = get_risk_label(max_score)
+    sev_color   = SEV_COLORS.get(overall_sev, (100, 116, 139))
 
-    # Badge background
-    badge_x, badge_y, badge_w, badge_h = 65, 158, 80, 50
+    badge_x, badge_y, badge_w, badge_h = 60, 158, 90, 22
     pdf.set_fill_color(*COL_BG_MID)
     pdf.rect(badge_x, badge_y, badge_w, badge_h, "F")
 
-    # Badge accent left border
+    # Accent left border
     pdf.set_fill_color(*sev_color)
     pdf.rect(badge_x, badge_y, 4, badge_h, "F")
 
-    # Score number
-    pdf.set_font("Helvetica", "B", 36)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_xy(badge_x + 4, badge_y + 5)
-    pdf.cell(badge_w - 4, 20, f"{max_score:.1f}", align="C",
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    # Score label
-    pdf.set_font("Helvetica", "B", 10)
+    # Risk level text
+    pdf.set_font("Helvetica", "B", 14)
     pdf.set_text_color(*sev_color)
-    pdf.set_xy(badge_x + 4, badge_y + 26)
-    pdf.cell(badge_w - 4, 8, risk_label, align="C",
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    # Score subtitle
-    pdf.set_font("Helvetica", "", 8)
-    pdf.set_text_color(*COL_MID_GRAY)
-    pdf.set_xy(badge_x + 4, badge_y + 34)
-    pdf.cell(badge_w - 4, 8, "MAX CVSS SCORE (0-10)", align="C",
+    pdf.set_xy(badge_x + 4, badge_y + 6)
+    pdf.cell(badge_w - 4, 10, risk_label.upper(), align="C",
              new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     # ── Severity Counts ────────────────────────────────────────────────────
@@ -424,7 +410,7 @@ def _draw_cover(pdf: SecurityReport, url: str, date: str, risk_summary: Dict):
     severities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
     box_w = 34
     start_x = (210 - (box_w * len(severities))) / 2
-    y_start = 222
+    y_start = 205
 
     for i, sev in enumerate(severities):
         bx = start_x + i * box_w
@@ -601,9 +587,12 @@ def _draw_findings_section(pdf, findings):
         if not group:
             continue
 
-        # Severity group header
-        sev_col    = SEV_COLORS.get(sev_name, (100, 116, 139))
-        sev_bg     = SEV_BG.get(sev_name, COL_LIGHT_GRAY)
+        sev_col = SEV_COLORS.get(sev_name, (100, 116, 139))
+        sev_bg  = SEV_BG.get(sev_name, COL_LIGHT_GRAY)
+
+        # Severity group header page break check
+        if pdf.get_y() > 235:
+            pdf.add_page()
 
         pdf.set_fill_color(*sev_bg)
         pdf.set_draw_color(*sev_col)
@@ -638,13 +627,12 @@ def _draw_finding_card(pdf, finding, num):
     cve      = finding.get("cve", "")
     vector   = finding.get("cvss_vector", "")
 
+    # Page break check (cards need ~40-50mm)
+    if pdf.get_y() > 220:
+        pdf.add_page()
+
     card_x = 20
     start_y = pdf.get_y()
-
-    # Page break check (need ~45mm)
-    if start_y > 240:
-        pdf.add_page()
-        start_y = pdf.get_y()
 
     # Card background
     pdf.set_fill_color(*COL_LIGHT_GRAY)
@@ -717,7 +705,7 @@ def _draw_finding_card(pdf, finding, num):
 
     # Extend left stripe to full card height
     pdf.set_fill_color(*sev_col)
-    card_h = end_y - start_y + 1
+    card_h = max(5.0, end_y - start_y + 1)
     pdf.rect(card_x, start_y, 4, card_h, "F")
 
     pdf.set_y(end_y + 1)

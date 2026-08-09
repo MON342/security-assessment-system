@@ -44,6 +44,7 @@ def run_tool(
             cmd,
             capture_output=True,
             text=True,
+            errors="replace",
             timeout=timeout,           # None = no limit
             env={**os.environ, **(env or {})},
             cwd=cwd,
@@ -58,26 +59,12 @@ def run_tool(
         return result.returncode, result.stdout, result.stderr
 
     except subprocess.TimeoutExpired:
-        # Only reachable if timeout is an integer (not None)
         elapsed = time.time() - start
-        logger.error(
-            f"[{tool_name}] TIMEOUT after {elapsed:.1f}s "
-            f"(limit={timeout}s)"
-        )
+        logger.error(f"[{tool_name}] TIMEOUT after {elapsed:.1f}s (limit={timeout}s)")
         return -1, "", f"Tool timed out after {timeout} seconds"
-
     except FileNotFoundError:
         logger.error(f"[{tool_name}] Tool binary not found: {cmd[0]}")
         return -2, "", f"Tool not found: {cmd[0]}"
-
-    except PermissionError:
-        logger.error(f"[{tool_name}] Permission denied: {cmd[0]}")
-        return -3, "", f"Permission denied when running: {cmd[0]}"
-
-    except OSError as e:
-        logger.error(f"[{tool_name}] OS error: {e}")
-        return -3, "", f"OS error: {e}"
-
     except Exception as e:
-        logger.error(f"[{tool_name}] Unexpected error: {e}")
+        logger.error(f"[{tool_name}] Error running tool: {e}")
         return -3, "", str(e)

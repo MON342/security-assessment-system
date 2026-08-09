@@ -47,7 +47,7 @@ def score_finding(finding: Dict) -> Dict:
     if base_score is None:
         base_score = FALLBACK_SCORES.get(severity, 0.0)
         # If finding already has a nuclei-provided score, use it
-        if finding.get("cvss_score"):
+        if finding.get("cvss_score") is not None:
             try:
                 base_score = float(finding["cvss_score"])
             except (ValueError, TypeError):
@@ -68,7 +68,7 @@ def score_all_findings(findings: List[Dict]) -> List[Dict]:
     # Sort: CRITICAL → HIGH → MEDIUM → LOW → INFO
     severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
     scored.sort(key=lambda f: (
-        severity_order.get(f.get("severity", "INFO"), 4),
+        severity_order.get(str(f.get("severity", "INFO")).upper(), 4),
         -f.get("cvss_base_score", 0)
     ))
     return scored

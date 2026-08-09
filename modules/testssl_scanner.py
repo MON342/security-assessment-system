@@ -84,55 +84,57 @@ def _parse_testssl_json(json_file: str) -> Dict:
     elif isinstance(data, list):
         scan_results = data
 
+    items_to_process = []
     for scan in scan_results:
         if not isinstance(scan, dict):
             continue
+        if "id" in scan or "finding" in scan or "severity" in scan:
+            items_to_process.append(scan)
+        else:
+            for cat_key, cat_val in scan.items():
+                if isinstance(cat_val, list):
+                    for item in cat_val:
+                        if isinstance(item, dict):
+                            items_to_process.append(item)
+                elif isinstance(cat_val, dict):
+                    items_to_process.append(cat_val)
 
-        # Flatten all finding categories
-        for category_key in scan:
-            category_items = scan[category_key]
-            if not isinstance(category_items, list):
-                continue
+    for item in items_to_process:
+        finding_id  = item.get("id", "")
+        severity    = str(item.get("severity", "INFO")).upper()
+        finding     = str(item.get("finding", ""))
+        cve_str     = item.get("cve", "")
 
-            for item in category_items:
-                if not isinstance(item, dict):
-                    continue
+        # Map testssl severity
+        mapped_sev = TESTSSL_SEVERITY_MAP.get(severity, "INFO")
 
-                finding_id  = item.get("id", "")
-                severity    = item.get("severity", "INFO").upper()
-                finding     = item.get("finding", "")
-                cve_str     = item.get("cve", "")
+        # Collect SSL info
+        if finding_id in ("cert_commonName", "cert_notAfter", "cert_issuer",
+                           "cert_keySize", "cert_signatureAlgorithm"):
+            ssl_info[finding_id] = finding
 
-                # Map testssl severity
-                mapped_sev = TESTSSL_SEVERITY_MAP.get(severity, "INFO")
+        # Only record actual problems (not INFO/OK)
+        if mapped_sev in ("LOW", "MEDIUM", "HIGH", "CRITICAL") or (
+            mapped_sev == "INFO" and _is_notable_info(finding_id, finding)
+        ):
+            title, desc, cvss = _get_finding_details(finding_id, finding)
+            if not title:
+                title = f"SSL/TLS Issue: {finding_id}"
+                desc  = finding
 
-                # Collect SSL info
-                if finding_id in ("cert_commonName", "cert_notAfter", "cert_issuer",
-                                   "cert_keySize", "cert_signatureAlgorithm"):
-                    ssl_info[finding_id] = finding
+            finding_entry = {
+                "tool":        "testssl",
+                "title":       title,
+                "severity":    mapped_sev if mapped_sev != "INFO" else "LOW",
+                "description": desc,
+                "evidence":    f"[{finding_id}] {finding}",
+                "category":   "SSL/TLS",
+                "cvss_vector": cvss,
+            }
+            if cve_str:
+                finding_entry["cve"] = cve_str
 
-                # Only record actual problems (not INFO/OK)
-                if mapped_sev in ("LOW", "MEDIUM", "HIGH", "CRITICAL") or (
-                    mapped_sev == "INFO" and _is_notable_info(finding_id, finding)
-                ):
-                    title, desc, cvss = _get_finding_details(finding_id, finding)
-                    if not title:
-                        title = f"SSL/TLS Issue: {finding_id}"
-                        desc  = finding
-
-                    finding_entry = {
-                        "tool":        "testssl",
-                        "title":       title,
-                        "severity":    mapped_sev if mapped_sev != "INFO" else "LOW",
-                        "description": desc,
-                        "evidence":    f"[{finding_id}] {finding}",
-                        "category":   "SSL/TLS",
-                        "cvss_vector": cvss,
-                    }
-                    if cve_str:
-                        finding_entry["cve"] = cve_str
-
-                    findings.append(finding_entry)
+            findings.append(finding_entry)
 
     # Deduplicate
     seen = set()

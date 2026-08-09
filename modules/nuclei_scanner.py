@@ -90,28 +90,33 @@ def _convert_nuclei_entry(entry: Dict) -> Dict:
     if not isinstance(entry, dict):
         return None
 
-    # Extract key fields (Nuclei v3 format)
-    template_id  = entry.get("template-id", entry.get("templateID", "unknown"))
-    template_name = entry.get("info", {}).get("name", template_id)
-    severity_raw = entry.get("info", {}).get("severity", "info").lower()
-    severity     = NUCLEI_SEVERITY_MAP.get(severity_raw, "INFO")
+    info = entry.get("info")
+    if not isinstance(info, dict):
+        info = {}
 
-    description  = entry.get("info", {}).get("description", "")
+    classification = info.get("classification")
+    if not isinstance(classification, dict):
+        classification = {}
+
+    template_id   = entry.get("template-id", entry.get("templateID", "unknown"))
+    template_name = info.get("name", template_id)
+    severity_raw  = str(info.get("severity", "info")).lower()
+    severity      = NUCLEI_SEVERITY_MAP.get(severity_raw, "INFO")
+
+    description  = info.get("description", "")
     matched_at   = entry.get("matched-at", entry.get("matched", ""))
     curl_command = entry.get("curl-command", "")
-    reference    = entry.get("info", {}).get("reference", [])
-    cve_ids      = entry.get("info", {}).get("classification", {}).get("cve-id", [])
-    cvss_score   = entry.get("info", {}).get("classification", {}).get(
-                       "cvss-score", None)
-    cvss_vector  = entry.get("info", {}).get("classification", {}).get(
-                       "cvss-metrics", config.DEFAULT_CVSS_VECTORS.get(severity, ""))
+    reference    = info.get("reference", [])
+    cve_ids      = classification.get("cve-id", [])
+    cvss_score   = classification.get("cvss-score", None)
+    cvss_vector  = classification.get("cvss-metrics", config.DEFAULT_CVSS_VECTORS.get(severity, ""))
 
     # Use nuclei-provided CVSS if available, else our default
     if not cvss_vector:
         cvss_vector = config.DEFAULT_CVSS_VECTORS.get(severity, config.DEFAULT_CVSS_VECTORS["INFO"])
 
     # Category from tags
-    tags = entry.get("info", {}).get("tags", [])
+    tags = info.get("tags", [])
     if isinstance(tags, str):
         tags = [t.strip() for t in tags.split(",")]
     category = _categorize_from_tags(tags)
@@ -119,28 +124,35 @@ def _convert_nuclei_entry(entry: Dict) -> Dict:
     # Evidence: matched URL or request snippet
     evidence = matched_at
     if not evidence and curl_command:
-        evidence = curl_command[:200]
+        evidence = str(curl_command)[:200]
 
     # References
     refs = []
     if isinstance(reference, list):
-        refs = reference[:3]
+        refs = [str(r) for r in reference[:3] if r]
     elif isinstance(reference, str):
         refs = [reference]
 
+    # Format CVE string safely
+    cve_str = ""
+    if isinstance(cve_ids, list):
+        cve_str = ", ".join(str(c) for c in cve_ids if c)
+    elif cve_ids:
+        cve_str = str(cve_ids)
+
     return {
         "tool":         "nuclei",
-        "title":        template_name,
+        "title":        str(template_name),
         "severity":     severity,
-        "description":  description or f"Nuclei template [{template_id}] matched.",
-        "evidence":     evidence,
+        "description":  str(description) or f"Nuclei template [{template_id}] matched.",
+        "evidence":     str(evidence),
         "category":     category,
-        "template_id":  template_id,
+        "template_id":  str(template_id),
         "cvss_vector":  cvss_vector,
         "cvss_score":   cvss_score,
-        "cve":          ", ".join(cve_ids) if isinstance(cve_ids, list) else (str(cve_ids) if cve_ids else ""),
+        "cve":          cve_str,
         "references":   refs,
-        "tags":         tags,
+        "tags":         tags if isinstance(tags, list) else [],
     }
 
 

@@ -1,0 +1,13 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Scan output & log files
+reports/*
+!reports/.gitkeep
+*.log
+
+# Environment variables
+.env

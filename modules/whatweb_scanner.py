@@ -64,12 +64,16 @@ def scan(url: str, output_dir: str) -> Dict[str, Any]:
                     for entry in (data if isinstance(data, list) else [data]):
                         plugins = entry.get("plugins", {})
                         for tech_name, tech_info in plugins.items():
+                            if not isinstance(tech_info, dict):
+                                continue
                             versions = tech_info.get("version", [])
                             strings = tech_info.get("string", [])
+                            ver_val = versions[0] if isinstance(versions, list) and versions else (versions if isinstance(versions, str) else None)
+                            str_val = strings[0] if isinstance(strings, list) and strings else (strings if isinstance(strings, str) else None)
                             tech_entry = {
                                 "name": tech_name,
-                                "version": versions[0] if versions else None,
-                                "detail": strings[0] if strings else None,
+                                "version": ver_val,
+                                "detail": str_val,
                             }
                             result["technologies"].append(tech_entry)
 

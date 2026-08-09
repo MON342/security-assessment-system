@@ -27,8 +27,8 @@ SENSITIVE_PATH_PATTERNS = [
      "Configuration File Exposed", "Configuration file with potential secrets is publicly accessible."),
     (r"/(server-status|server-info|status|health|ping|actuator)", "MEDIUM",
      "Server Status Page Exposed", "Server diagnostics page reveals internal information."),
-    (r"/(upload|uploads|files|media|assets)/", "MEDIUM",
-     "Upload Directory Accessible", "Upload directory may allow file listing or upload abuse."),
+    (r"/(upload|uploads)(/|$)", "LOW",
+     "Upload Directory Accessible", "Upload directory exposed. Check for directory listing or upload abuse."),
     (r"/robots\.txt", "INFO",
      "robots.txt Discovered", "robots.txt may reveal hidden paths disallowed for crawlers."),
     (r"/(crossdomain\.xml|clientaccesspolicy\.xml)", "MEDIUM",
@@ -112,7 +112,7 @@ def _parse_gobuster_output(raw: str) -> List[Dict]:
     paths = []
     # Match lines like: /admin  (Status: 200) [Size: 4096]
     pattern = re.compile(
-        r"^(/[^\s]*).*\(Status:\s*(\d+)\)(?:.*\[Size:\s*(\d+)\])?",
+        r"(?:^|\s)(/[^\s\?\#]*)\s+\(Status:\s*(\d+)\)(?:.*\[Size:\s*(\d+)\])?",
         re.MULTILINE
     )
     for m in pattern.finditer(raw):

@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""
-assessor.py — Automated Security Misconfiguration Assessment and Auditing System
-Usage: python3 assessor.py -u <URL> [options]
-
-Tools: Nikto | Nuclei | Nmap | Gobuster | testssl | WhatWeb
-"""
-
 import argparse
 import json
 import logging

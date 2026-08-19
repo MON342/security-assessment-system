@@ -160,7 +160,7 @@ def run_assessment(args) -> int:
 
     # ── Determine tools ───────────────────────────────────────────────────────
     if args.tools:
-        tools = [t.strip().lower() for t in args.tools.split(",")]
+        tools = [t.strip().lower() for t in args.tools.split(",") if t.strip()]
         invalid = [t for t in tools if t not in TOOL_MAP]
         if invalid:
             print(f"[ERROR] Unknown tools: {', '.join(invalid)}")

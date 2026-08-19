@@ -61,18 +61,36 @@ def scan(url: str, output_dir: str) -> Dict[str, Any]:
 def _parse_nikto_json(json_file: str) -> List[Dict]:
     """Parse Nikto JSON output format."""
     with open(json_file, "r", errors="replace") as f:
-        data = json.load(f)
+        content = f.read().strip()
+
+    if not content:
+        return []
+
+    # Strip any non-JSON prefix (e.g. warning banners)
+    idx = min(
+        [i for i in [content.find("["), content.find("{")] if i != -1],
+        default=-1
+    )
+    if idx != -1:
+        content = content[idx:]
+
+    data = json.loads(content)
 
     findings = []
-    # Nikto JSON: {"host": {...}, "vulnerabilities": [...]}
     vulns = []
     if isinstance(data, dict):
         vulns = data.get("vulnerabilities", [])
-        # Some versions wrap in host object
         if not vulns and "host" in data:
-            vulns = data["host"].get("vulnerabilities", [])
+            host_obj = data["host"]
+            if isinstance(host_obj, dict):
+                vulns = host_obj.get("vulnerabilities", [])
+        if not vulns and "hosts" in data:
+            hosts_obj = data["hosts"]
+            if isinstance(hosts_obj, list):
+                for h in hosts_obj:
+                    if isinstance(h, dict):
+                        vulns.extend(h.get("vulnerabilities", []))
     elif isinstance(data, list):
-        # Newer nikto versions output array of hosts
         for host_obj in data:
             if isinstance(host_obj, dict):
                 vulns.extend(host_obj.get("vulnerabilities", []))
@@ -81,13 +99,14 @@ def _parse_nikto_json(json_file: str) -> List[Dict]:
         if not isinstance(vuln, dict):
             continue
 
-        osvdb    = str(vuln.get("OSVDBID", vuln.get("id", "0")))
-        msg      = vuln.get("msg", vuln.get("message", ""))
-        uri      = vuln.get("uri", vuln.get("url", ""))
+        osvdb    = str(vuln.get("OSVDBID", vuln.get("OSVDB", vuln.get("osvdb", vuln.get("id", "0")))))
+        msg      = vuln.get("msg", vuln.get("message", vuln.get("description", "")))
+        uri      = vuln.get("uri", vuln.get("url", vuln.get("path", "")))
         method   = vuln.get("method", "GET")
 
+        if not msg:
+            continue
 
-        # Determine severity from message content
         severity = _classify_nikto_severity(msg)
 
         findings.append({

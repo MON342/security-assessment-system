@@ -108,12 +108,13 @@ def _parse_gobuster_output(raw: str) -> List[Dict]:
     """
     Parse gobuster output lines.
     Format: /path   (Status: 200) [Size: 1234]
+       or:  http://target/path (Status: 200) [Size: 1234]
     """
     paths = []
-    # Match lines like: /admin  (Status: 200) [Size: 4096]
+    # Match lines like: /admin  (Status: 200) [Size: 4096] or http://target/admin (Status: 200)
     pattern = re.compile(
-        r"(?:^|\s)(/[^\s\?\#]*)\s+\(Status:\s*(\d+)\)(?:.*\[Size:\s*(\d+)\])?",
-        re.MULTILINE
+        r"(?:^|\s)(?:https?://[^/\s]+)?(/[^?\s#]*)\s+\(Status:\s*(\d+)\)(?:.*\[Size:\s*(\d+)\])?",
+        re.IGNORECASE | re.MULTILINE
     )
     for m in pattern.finditer(raw):
         path, code, size = m.group(1), int(m.group(2)), m.group(3)

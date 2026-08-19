@@ -53,35 +53,50 @@ def scan(url: str, output_dir: str) -> Dict[str, Any]:
         try:
             with open(out_file, "r", errors="replace") as f:
                 content = f.read().strip()
-            # WhatWeb outputs one JSON object per line (JSONL)
-            for line in content.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
+            
+            entries = []
+            if content:
                 try:
-                    data = json.loads(line)
-                    # data is a list: [{target, http_status, plugins: {...}}, ...]
-                    for entry in (data if isinstance(data, list) else [data]):
-                        plugins = entry.get("plugins", {})
-                        for tech_name, tech_info in plugins.items():
-                            if not isinstance(tech_info, dict):
-                                continue
-                            versions = tech_info.get("version", [])
-                            strings = tech_info.get("string", [])
-                            ver_val = versions[0] if isinstance(versions, list) and versions else (versions if isinstance(versions, str) else None)
-                            str_val = strings[0] if isinstance(strings, list) and strings else (strings if isinstance(strings, str) else None)
-                            tech_entry = {
-                                "name": tech_name,
-                                "version": ver_val,
-                                "detail": str_val,
-                            }
-                            result["technologies"].append(tech_entry)
-
-                        # HTTP status
-                        http_status = entry.get("http_status", 0)
-                        result["http_status"] = http_status
+                    data = json.loads(content)
+                    if isinstance(data, list):
+                        entries.extend(data)
+                    elif isinstance(data, dict):
+                        entries.append(data)
                 except json.JSONDecodeError:
-                    pass
+                    # WhatWeb outputs multi-line JSON array or JSONL
+                    for line in content.splitlines():
+                        line = line.strip().rstrip(",")
+                        if not line or line in ("[", "]"):
+                            continue
+                        try:
+                            item = json.loads(line)
+                            if isinstance(item, list):
+                                entries.extend(item)
+                            elif isinstance(item, dict):
+                                entries.append(item)
+                        except json.JSONDecodeError:
+                            pass
+
+            for entry in entries:
+                plugins = entry.get("plugins", {})
+                for tech_name, tech_info in plugins.items():
+                    if not isinstance(tech_info, dict):
+                        continue
+                    versions = tech_info.get("version", [])
+                    strings = tech_info.get("string", [])
+                    ver_val = versions[0] if isinstance(versions, list) and versions else (versions if isinstance(versions, str) else None)
+                    str_val = strings[0] if isinstance(strings, list) and strings else (strings if isinstance(strings, str) else None)
+                    tech_entry = {
+                        "name": tech_name,
+                        "version": ver_val,
+                        "detail": str_val,
+                    }
+                    result["technologies"].append(tech_entry)
+
+                # HTTP status
+                http_status = entry.get("http_status", 0)
+                if http_status:
+                    result["http_status"] = http_status
         except Exception as e:
             logger.warning(f"[whatweb] Failed to parse output: {e}")
 

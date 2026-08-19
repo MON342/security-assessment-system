@@ -11,3 +11,6 @@ reports/*
 
 # Environment variables
 .env
+
+# Pytest cache
+.pytest_cache/

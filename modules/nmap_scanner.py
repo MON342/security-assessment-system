@@ -141,8 +141,9 @@ def _parse_headers(raw: str) -> Dict[str, str]:
     """Parse HTTP headers from nmap script output."""
     headers = {}
     for line in raw.splitlines():
-        if ":" in line:
-            k, _, v = line.partition(":")
+        cleaned = re.sub(r"^\s*\d+:\s*", "", line).strip()
+        if ":" in cleaned and not cleaned.startswith("(") and not cleaned.lower().startswith("http/"):
+            k, _, v = cleaned.partition(":")
             headers[k.strip().lower()] = v.strip()
     return headers
 

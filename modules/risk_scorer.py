@@ -31,32 +31,37 @@ def score_finding(finding: Dict) -> Dict:
     Adds 'cvss_base_score' and 'cvss_severity' to the finding dict.
     Returns updated finding dict.
     """
+    finding = dict(finding)
     vector = finding.get("cvss_vector", "")
-    severity = finding.get("severity", "INFO").upper()
+    severity = str(finding.get("severity", "INFO")).upper()
+    if severity not in FALLBACK_SCORES:
+        severity = "INFO"
+    finding["severity"] = severity
 
-    # Try to calculate from CVSS vector
     base_score = None
-    if CVSS_AVAILABLE and vector and vector.startswith("CVSS:3"):
+
+    # Priority 1: Explicit score provided by tool (e.g. Nuclei)
+    if finding.get("cvss_score") is not None:
+        try:
+            base_score = float(finding["cvss_score"])
+        except (ValueError, TypeError):
+            pass
+
+    # Priority 2: Calculate from CVSS v3 vector if not explicitly set
+    if base_score is None and CVSS_AVAILABLE and vector and vector.startswith("CVSS:3"):
         try:
             c = CVSS3(vector)
             base_score = float(c.base_score)
         except Exception as e:
             logger.debug(f"CVSS parse error for vector '{vector}': {e}")
 
-    # Fallback: use severity-based score
+    # Priority 3: Fallback based on severity
     if base_score is None:
         base_score = FALLBACK_SCORES.get(severity, 0.0)
-        # If finding already has a nuclei-provided score, use it
-        if finding.get("cvss_score") is not None:
-            try:
-                base_score = float(finding["cvss_score"])
-            except (ValueError, TypeError):
-                pass
 
     # Map score back to severity label
     cvss_severity = _score_to_severity(base_score)
 
-    finding = dict(finding)
     finding["cvss_base_score"] = round(base_score, 1)
     finding["cvss_severity"]   = cvss_severity
     return finding
@@ -100,11 +105,12 @@ def calculate_overall_score(findings: List[Dict]) -> Dict[str, Any]:
     scores_by_severity: Dict[str, List[float]] = {s: [] for s in SEVERITY_KEYS}
 
     for f in findings:
-        sev   = f.get("severity", "INFO").upper()
+        sev   = str(f.get("severity", "INFO")).upper()
+        if sev not in counts:
+            sev = "INFO"
         score = f.get("cvss_base_score", FALLBACK_SCORES.get(sev, 0.0))
-        if sev in counts:
-            counts[sev] += 1
-            scores_by_severity[sev].append(score)
+        counts[sev] += 1
+        scores_by_severity[sev].append(score)
 
     # Gather all non-zero scores sorted highest first
     all_scores = sorted(

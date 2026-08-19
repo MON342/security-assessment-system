@@ -72,7 +72,24 @@ def scan(url: str, output_dir: str) -> Dict[str, Any]:
 def _parse_testssl_json(json_file: str) -> Dict:
     """Parse testssl JSON output into findings."""
     with open(json_file, "r", errors="replace") as f:
-        data = json.load(f)
+        content = f.read().strip()
+
+    if not content:
+        return {"findings": [], "ssl_info": {}}
+
+    # Strip any non-JSON header lines (e.g. warning messages)
+    idx = min(
+        [i for i in [content.find("["), content.find("{")] if i != -1],
+        default=-1
+    )
+    if idx != -1:
+        content = content[idx:]
+
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as e:
+        logger.warning(f"[testssl] Failed to parse JSON: {e}")
+        return {"findings": [], "ssl_info": {}}
 
     findings = []
     ssl_info = {}

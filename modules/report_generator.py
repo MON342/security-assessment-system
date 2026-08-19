@@ -96,6 +96,8 @@ def generate_report(
     Returns:
         {"pdf": "...", "txt": "..."}
     """
+    os.makedirs(output_dir, exist_ok=True)
+
     from urllib.parse import urlparse
     import re
     parsed = urlparse(url)
@@ -627,20 +629,17 @@ def _draw_finding_card(pdf, finding, num):
     cve      = finding.get("cve", "")
     vector   = finding.get("cvss_vector", "")
 
-    # Page break check (cards need ~40-50mm)
-    if pdf.get_y() > 220:
+    # Estimate height needed for card to avoid awkward page breaks
+    desc_lines = (len(desc) // 65) + 1 if desc else 0
+    ev_lines   = (len(evidence) // 65) + 1 if evidence else 0
+    est_height = 15 + (desc_lines * 5) + (ev_lines * 4.5) + (4 if vector else 0)
+
+    # Page break check using estimated height
+    if pdf.get_y() + est_height > 260:
         pdf.add_page()
 
     card_x = 20
     start_y = pdf.get_y()
-
-    # Card background
-    pdf.set_fill_color(*COL_LIGHT_GRAY)
-    pdf.rect(card_x, start_y, 170, 2, "F")
-
-    # Left severity stripe
-    pdf.set_fill_color(*sev_col)
-    pdf.rect(card_x, start_y, 4, 2, "F")  # Will extend with content
 
     # Finding number + title
     pdf.set_font("Helvetica", "B", 9)
@@ -697,18 +696,20 @@ def _draw_finding_card(pdf, finding, num):
         pdf.cell(164, 4, f"CVSS Vector: {vector}", align="L",
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-    # Bottom border line
+    # Calculate actual card height and draw borders / accent
     end_y = pdf.get_y() + 1
+    card_h = max(10.0, end_y - start_y) if end_y > start_y else est_height
+
+    # Bottom border line
     pdf.set_draw_color(*sev_col)
     pdf.set_line_width(0.2)
     pdf.line(card_x + 4, end_y, card_x + 170, end_y)
 
-    # Extend left stripe to full card height
+    # Left severity stripe
     pdf.set_fill_color(*sev_col)
-    card_h = max(5.0, end_y - start_y + 1)
     pdf.rect(card_x, start_y, 4, card_h, "F")
 
-    pdf.set_y(end_y + 1)
+    pdf.set_y(end_y + 2)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

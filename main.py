@@ -54,7 +54,7 @@ TOOL_MAP = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Setup
+#  Setup & Helper Functions
 # ─────────────────────────────────────────────────────────────────────────────
 def setup_logging(verbose: bool, log_file: str = None):
     level = logging.DEBUG if verbose else logging.INFO
@@ -79,13 +79,17 @@ def validate_url(url: str) -> str:
     return url
 
 
+def is_tool_available(path: str) -> bool:
+    """Check if a tool path exists and is executable or available in PATH."""
+    return bool(path and (shutil.which(path) or (os.path.isfile(path) and os.access(path, os.X_OK))))
+
+
 def check_tools(tool_names: list) -> bool:
     """Verify required tools are available."""
     ok = True
     for name in tool_names:
         path = config.TOOL_PATHS.get(name)
-        is_avail = bool(path and (shutil.which(path) or (os.path.isfile(path) and os.access(path, os.X_OK))))
-        if not is_avail:
+        if not is_tool_available(path):
             print(f"  [MISSING] {name} ({path})")
             ok = False
         else:
@@ -219,11 +223,8 @@ def run_assessment(args) -> int:
         module = TOOL_MAP[tool_name]
         progress.start(tool_name)
 
-        tool_dir = os.path.join(output_dir, tool_name)
-        os.makedirs(tool_dir, exist_ok=True)
-
         try:
-            result = module.scan(url, tool_dir)
+            result = module.scan(url, output_dir)
             scan_results[tool_name] = result
             findings     = result.get("findings", [])
             status       = result.get("status", "unknown")
@@ -234,9 +235,9 @@ def run_assessment(args) -> int:
                 raw = result.get("raw_output", "")
                 error_reason = raw.strip().splitlines()[-1][:120] if raw.strip() else status
 
-            # Save individual tool log file in tool subfolder
+            # Save individual tool log file directly in report output directory
             raw_output = result.get("raw_output", "")
-            tool_log_path = os.path.join(tool_dir, f"{tool_name}.log")
+            tool_log_path = os.path.join(output_dir, f"{tool_name}.log")
             try:
                 with open(tool_log_path, "w", encoding="utf-8", errors="replace") as f_log:
                     f_log.write(raw_output)
@@ -257,7 +258,7 @@ def run_assessment(args) -> int:
                 f"[{tool_name}] Unexpected error: {error_reason}",
                 exc_info=args.verbose
             )
-            tool_log_path = os.path.join(tool_dir, f"{tool_name}.log")
+            tool_log_path = os.path.join(output_dir, f"{tool_name}.log")
             try:
                 with open(tool_log_path, "w", encoding="utf-8", errors="replace") as f_log:
                     f_log.write(f"Unexpected error: {error_reason}")
@@ -272,27 +273,18 @@ def run_assessment(args) -> int:
             }
             progress.done(tool_name, 0, "error", error_reason)
 
-    # ── CVSS Scoring & Per-Tool JSON Generation ──────────────────────────────
+    # ── CVSS Scoring ──────────────────────────────────────────────────────────
     print(f"\n{'═'*65}")
     print("  Computing CVSS risk scores...")
     scored_findings = score_all_findings(all_findings)
     risk_summary    = calculate_overall_score(scored_findings)
 
-    # Update scan_results findings with scored findings and save separate per-tool JSON in tool subfolder
+    # Update scan_results findings with scored findings
     for tool_name in tools:
         if tool_name in scan_results:
             tool_data = scan_results[tool_name]
             tool_findings = [f for f in scored_findings if f.get("tool") == tool_name]
             tool_data["findings"] = tool_findings
-
-            tool_dir = os.path.join(output_dir, tool_name)
-            os.makedirs(tool_dir, exist_ok=True)
-            tool_json_path = os.path.join(tool_dir, f"{tool_name}.json")
-            try:
-                with open(tool_json_path, "w", encoding="utf-8", errors="replace") as f_json:
-                    json.dump(tool_data, f_json, indent=2, ensure_ascii=False)
-            except Exception as json_err:
-                logger.warning(f"Failed to save json for {tool_name}: {json_err}")
 
     # ── Print interim summary ─────────────────────────────────────────────────
     _print_scan_summary(url, risk_summary, scored_findings, tools)
@@ -324,22 +316,18 @@ def run_assessment(args) -> int:
             handler.close()
             logging.root.removeHandler(handler)
         
-    RAW_INTERMEDIATE_FILES = (
-        "whatweb_results.json", "nmap_results.xml", "testssl_results.json",
-        "nikto_results.json", "gobuster_results.txt", "nuclei_results.jsonl"
-    )
-    for tool_name in tools:
-        tool_dir = os.path.join(output_dir, tool_name)
-        if os.path.isdir(tool_dir):
-            for raw_f in RAW_INTERMEDIATE_FILES:
-                raw_p = os.path.join(tool_dir, raw_f)
-                if os.path.isfile(raw_p):
-                    try:
-                        os.remove(raw_p)
-                    except OSError:
-                        pass
+    for item in os.listdir(output_dir):
+        item_path = os.path.join(output_dir, item)
+        if os.path.isfile(item_path):
+            ext = os.path.splitext(item)[1].lower()
+            if ext not in (".pdf", ".txt", ".log"):
+                try:
+                    os.remove(item_path)
+                except OSError:
+                    pass
 
-    print("  [OK] Scan completed and individual tool logs & json retained in tool subfolders.")
+    print("  [OK] Scan completed and individual tool logs retained in output directory.")
+
                 
     print(f"\n{'═'*65}")
     print(f"  Scan complete! Output directory: {output_dir}")
@@ -421,11 +409,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3 assessor.py -u https://example.com
-  python3 assessor.py -u http://testphp.vulnweb.com
-  python3 assessor.py -u https://example.com --tools nmap,nikto,nuclei
-  python3 assessor.py -u https://example.com -v --no-report
-  python3 assessor.py -u https://example.com --list-tools
+  python3 main.py -u https://example.com
+  python3 main.py -u http://testphp.vulnweb.com
+  python3 main.py -u https://example.com --tools nmap,nikto,nuclei
+  python3 main.py -u https://example.com -v --no-report
+  python3 main.py -u https://example.com --list-tools
         """,
     )
 
@@ -485,8 +473,7 @@ def main():
         print(f"  {'Tool':<12} {'Path':<40} {'Available'}")
         print(f"  {'-'*60}")
         for name, path in config.TOOL_PATHS.items():
-            is_avail = bool(path and (shutil.which(path) or (os.path.isfile(path) and os.access(path, os.X_OK))))
-            avail = "✓" if is_avail else "✗"
+            avail = "✓" if is_tool_available(path) else "✗"
             print(f"  {name:<12} {path:<40} {avail}")
         sys.exit(0)
 

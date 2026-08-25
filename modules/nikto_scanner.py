@@ -43,9 +43,15 @@ def scan(url: str, output_dir: str) -> Dict[str, Any]:
     }
 
     # Parse JSON output
+    json_file_to_parse = None
     if os.path.exists(out_json):
+        json_file_to_parse = out_json
+    elif os.path.exists(out_json + ".json"):
+        json_file_to_parse = out_json + ".json"
+
+    if json_file_to_parse:
         try:
-            result["findings"] = _parse_nikto_json(out_json)
+            result["findings"] = _parse_nikto_json(json_file_to_parse)
         except Exception as e:
             logger.warning(f"[nikto] Failed to parse JSON, trying text parse: {e}")
             result["findings"] = _parse_nikto_text(stdout)

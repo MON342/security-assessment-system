@@ -29,14 +29,15 @@ def score_finding(finding: Dict) -> Dict:
     """
     Calculate CVSS base score for a single finding.
     Adds 'cvss_base_score' and 'cvss_severity' to the finding dict.
+    Synchronizes 'severity' with 'cvss_severity' for consistent classification.
     Returns updated finding dict.
     """
     finding = dict(finding)
     vector = finding.get("cvss_vector", "")
-    severity = str(finding.get("severity", "INFO")).upper()
-    if severity not in FALLBACK_SCORES:
-        severity = "INFO"
-    finding["severity"] = severity
+    orig_severity = str(finding.get("severity", "INFO")).upper()
+    if orig_severity not in FALLBACK_SCORES:
+        orig_severity = "INFO"
+    finding["original_severity"] = orig_severity
 
     base_score = None
 
@@ -57,20 +58,21 @@ def score_finding(finding: Dict) -> Dict:
 
     # Priority 3: Fallback based on severity
     if base_score is None:
-        base_score = FALLBACK_SCORES.get(severity, 0.0)
+        base_score = FALLBACK_SCORES.get(orig_severity, 0.0)
 
     # Map score back to severity label
     cvss_severity = _score_to_severity(base_score)
 
     finding["cvss_base_score"] = round(base_score, 1)
     finding["cvss_severity"]   = cvss_severity
+    finding["severity"]        = cvss_severity  # Sync severity with CVSS severity
     return finding
 
 
 def score_all_findings(findings: List[Dict]) -> List[Dict]:
     """Score all findings and return sorted by severity (highest first)."""
     scored = [score_finding(f) for f in findings]
-    # Sort: CRITICAL → HIGH → MEDIUM → LOW → INFO
+    # Sort: CRITICAL → HIGH → MEDIUM → LOW → INFO based on CVSS score and severity
     severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
     scored.sort(key=lambda f: (
         severity_order.get(str(f.get("severity", "INFO")).upper(), 4),

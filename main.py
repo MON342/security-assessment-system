@@ -93,13 +93,34 @@ def check_tools(tool_names: list) -> bool:
     return ok
 
 
+def get_next_scan_number(report_dir: str) -> int:
+    """Find the next scan run number based on existing scan directories."""
+    if not os.path.exists(report_dir):
+        return 1
+    
+    max_num = 0
+    dirs_count = 0
+    for name in os.listdir(report_dir):
+        full_path = os.path.join(report_dir, name)
+        if os.path.isdir(full_path) and not name.startswith("."):
+            dirs_count += 1
+            match = re.match(r"^\((\d+)\)", name)
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+    
+    if max_num > 0:
+        return max_num + 1
+    return dirs_count + 1
+
+
 def create_output_dir(url: str, timestamp: str) -> str:
-    """Create a clear, human-readable unique output directory for this scan."""
-    parsed = urlparse(url)
-    host   = parsed.hostname or "target"
+    """Create a clear, human-readable unique output directory for this scan with sequential number prefix."""
+    scan_num   = get_next_scan_number(config.REPORT_DIR)
+    parsed     = urlparse(url)
+    host       = parsed.hostname or "target"
     host_clean = re.sub(r"[^\w.-]", "_", host)
     port_str   = f"_port{parsed.port}" if parsed.port else ""
-    dir_name   = f"scan_{host_clean}{port_str}_{timestamp}"
+    dir_name   = f"({scan_num})report_{host_clean}{port_str}_{timestamp}"
     out_dir    = os.path.join(config.REPORT_DIR, dir_name)
     os.makedirs(out_dir, exist_ok=True)
     return out_dir

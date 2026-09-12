@@ -35,10 +35,14 @@ def scan(url: str, output_dir: str) -> Dict[str, Any]:
     host = parsed.hostname or url
     out_xml = os.path.join(output_dir, "nmap_results.xml")
 
+    target_ports = config.NMAP_PORTS
+    if parsed.port and str(parsed.port) not in target_ports.split(","):
+        target_ports = f"{parsed.port},{target_ports}"
+
     cmd = [
         config.TOOL_PATHS["nmap"],
         "-sV", "-sC",
-        "-p", config.NMAP_PORTS,
+        "-p", target_ports,
         f"--script={config.NMAP_SCRIPTS}",
         "--script-timeout", "30s",
         "-oX", out_xml,
@@ -126,6 +130,12 @@ def _parse_nmap_xml(xml_file: str) -> Dict:
                     http_info["server"] = sout.strip()
                 elif sid == "ssl-cert":
                     http_info["ssl_cert"] = _parse_ssl_cert(sout)
+                elif sid == "http-enum":
+                    http_info["enum_paths"] = _parse_http_enum(sout)
+                elif sid == "http-config-backup":
+                    http_info["config_backups"] = _parse_http_config_backup(sout)
+                elif sid == "http-apache-server-status":
+                    http_info["apache_status"] = sout.strip()
 
             services.append(svc_info)
 
@@ -159,6 +169,59 @@ def _parse_ssl_cert(raw: str) -> Dict:
         elif "Issuer:" in line:
             info["issuer"] = line.split("Issuer:", 1)[1].strip()
     return info
+
+
+def _parse_http_enum(raw: str) -> List[Dict]:
+    """Parse http-enum script output to extract discovered paths.
+
+    Typical output format:
+      /admin/: Possible admin folder
+      /config/: Configuration directory
+      /icons/: Apache default icons
+    """
+    paths = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("|"):
+            line = line.lstrip("|").strip()
+            if not line or line.startswith("_"):
+                continue
+        # Match lines like: /path/: Description text
+        match = re.match(r"^(/\S+?):\s*(.*)$", line)
+        if match:
+            paths.append({
+                "path":        match.group(1),
+                "description": match.group(2).strip(),
+            })
+    return paths
+
+
+def _parse_http_config_backup(raw: str) -> List[str]:
+    """Parse http-config-backup script output.
+
+    Typical output format:
+      http://target/web.config.bak
+      http://target/.htaccess.bak
+    Or just file paths like:
+      /web.config.bak
+      /.htaccess.bak
+    """
+    backups = []
+    for line in raw.splitlines():
+        line = line.strip().lstrip("|").strip()
+        if not line or line.startswith("_"):
+            continue
+        # Extract path from URL or bare path
+        if line.startswith("http"):
+            # Extract path portion from full URL
+            from urllib.parse import urlparse as _urlparse
+            parsed = _urlparse(line)
+            backups.append(parsed.path or line)
+        elif line.startswith("/"):
+            backups.append(line)
+        elif re.match(r"^[\w./\\-]+\.(bak|old|orig|save|swp|copy|backup|conf|config)$", line, re.IGNORECASE):
+            backups.append(line)
+    return backups
 
 
 def _generate_findings(result: Dict) -> List[Dict]:
@@ -269,6 +332,65 @@ def _generate_findings(result: Dict) -> List[Dict]:
             "evidence":    f"Server: {server}",
             "category":    "Information Disclosure",
             "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+        })
+
+    # ── http-enum: Discovered directories and files ───────────────────────
+    enum_paths = http_info.get("enum_paths", [])
+    for ep in enum_paths:
+        path = ep.get("path", "")
+        desc = ep.get("description", "")
+        if not path:
+            continue
+        # Classify severity based on the path content
+        sev = "MEDIUM"
+        category = "Directory/File Exposure"
+        if re.search(r"(admin|manager|phpmyadmin|cpanel)", path, re.IGNORECASE):
+            sev = "CRITICAL"
+            category = "Admin Panel Exposure"
+        elif re.search(r"(\.env|\.git|\.svn|\.htpasswd|config|backup|dump)", path, re.IGNORECASE):
+            sev = "HIGH"
+            category = "Sensitive File Exposure"
+        elif re.search(r"(phpinfo|info\.php|test|debug|status)", path, re.IGNORECASE):
+            sev = "HIGH"
+            category = "Information Disclosure"
+        findings.append({
+            "tool":        "nmap",
+            "title":       f"Enumerated Path: {path}",
+            "severity":    sev,
+            "description": desc or f"http-enum script discovered accessible path: {path}",
+            "evidence":    f"Path: {path}",
+            "category":    category,
+            "cvss_vector": config.DEFAULT_CVSS_VECTORS.get(sev, config.DEFAULT_CVSS_VECTORS["MEDIUM"]),
+        })
+
+    # ── http-config-backup: Configuration backup files found ──────────────
+    config_backups = http_info.get("config_backups", [])
+    for cb in config_backups:
+        findings.append({
+            "tool":        "nmap",
+            "title":       f"Configuration Backup File Found: {cb}",
+            "severity":    "HIGH",
+            "description": ("A configuration backup file was discovered on the server. "
+                           "These files often contain database credentials, API keys, "
+                           "and other sensitive information."),
+            "evidence":    f"Backup file: {cb}",
+            "category":    "Sensitive File Exposure",
+            "cvss_vector": config.DEFAULT_CVSS_VECTORS["HIGH"],
+        })
+
+    # ── http-apache-server-status: Apache status page exposed ─────────────
+    apache_status = http_info.get("apache_status", "")
+    if apache_status:
+        findings.append({
+            "tool":        "nmap",
+            "title":       "Apache Server Status Page Exposed",
+            "severity":    "MEDIUM",
+            "description": ("Apache mod_status (server-status) page is publicly accessible. "
+                           "This reveals active connections, request details, server uptime, "
+                           "and internal IP addresses — valuable for attackers."),
+            "evidence":    f"server-status output: {apache_status[:300]}",
+            "category":    "Information Disclosure",
+            "cvss_vector": config.DEFAULT_CVSS_VECTORS["MEDIUM"],
         })
 
     return findings

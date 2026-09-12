@@ -28,7 +28,7 @@ def scan(url: str, output_dir: str) -> Dict[str, Any]:
         "-Format", "json",
         "-output", out_json,
         "-nointeractive",
-        "-Tuning", "x",          # All test categories (valid shorthand across versions)
+        "-Tuning", "2",          # Tuning 2 = Misconfiguration / Default Files
         "-timeout", "5",
     ]
 
